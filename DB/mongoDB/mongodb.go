@@ -37,36 +37,18 @@ type MongoDBType struct {
 //-----------------------------------------------------------------------------
 var pMongoDBObjs []*MongoDBType
 
-var pMongoDBMapLock sync.Mutex
-var pMongoDBMap map[string]*MongoDBType
-
 // ----------------------------------------------------------------------------
 // 函式
 // ----------------------------------------------------------------------------
 func init() {
 	fmt.Println("init function was called.")
 	pMongoDBObjs = make([]*MongoDBType, 0)
-	pMongoDBMap = make(map[string]*MongoDBType)
 }
 
-func New(sName string) *MongoDBType {
+func New(pName string) *MongoDBType {
 	var pErr error
 
-	if sName == "" {
-		sName = "Base"
-	}
-
-	pMongoDBMapLock.Lock()
-	pMongoDB, bExist := pMongoDBMap[sName]
-	pMongoDBMapLock.Unlock()
-	if bExist {
-		return pMongoDB
-	}
-
-	pMongoDB = new(MongoDBType)
-
-	pMongoDB.bFlagQuit = make(chan bool)
-	pMongoDB.bIsLink = false
+	pMongoDB := new(MongoDBType)
 
 	pMongoDB.sURLBase = "mongodb://127.0.0.1:27017/"
 
@@ -79,51 +61,9 @@ func New(sName string) *MongoDBType {
 		return pMongoDB
 	}
 
-	pContext, pContextCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer pContextCancel()
-
-	pErr = pMongoDB.pDBConn.Connect(pContext)
-	if pErr == nil {
-		pErr = pMongoDB.pDBConn.Ping(pContext, nil)
-		if pErr != nil {
-			fmt.Println(pErr)
-			pMongoDB.bIsLink = false
-			pErr = pMongoDB.pDBConn.Disconnect(pContext)
-			if pErr != nil {
-				fmt.Println(pErr)
-			}
-		} else {
-			pMongoDB.bIsLink = true
-		}
-	}
-
-	if pMongoDB.IsAlive() {
-		pMongoDB.pDBConnDB = pMongoDB.pDBConn.Database(pMongoDB.sDBName)
-	}
-
-	go pMongoDB.pingServer()
-
 	pMongoDBObjs = append(pMongoDBObjs, pMongoDB)
 
-	pMongoDBMapLock.Lock()
-	pMongoDBMap[sName] = pMongoDB
-	pMongoDBMapLock.Unlock()
-
 	return pMongoDB
-}
-
-func (pObj *MongoDBType) pingServer() {
-	// 建立 1 分鐘 的 Ticker
-	pTicker := time.NewTicker(1 * time.Minute)
-	for {
-		select {
-		case <-pObj.bFlagQuit:
-			return
-		// Ticket 時間
-		case <-pTicker.C:
-			pObj.IsAlive()
-		}
-	}
 }
 
 // IsAlive :
